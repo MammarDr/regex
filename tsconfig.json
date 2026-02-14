@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist",
+
+    "module": "esnext",
+    "target": "es2020",
+    "lib": ["esnext"],
+    "types": ["node"],
+
+    "sourceMap": true,
+    "declaration": false,
+    "declarationMap": false,
+
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
+    "strict": true,
+    "jsx": "preserve",
+    "verbatimModuleSyntax": false,
+    "isolatedModules": false,
+    "noUncheckedSideEffectImports": false,
+    "moduleDetection": "force",
+    "skipLibCheck": true
+  }
+}
