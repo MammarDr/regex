@@ -3,7 +3,7 @@ export default class RecursiveParser {
   private pointer: number;
   private input: Array<string | { token: string; value: string }>;
 
-  private reservedChar = [
+  private reservedChar = new Set([
     "|",
     "*",
     "+",
@@ -15,39 +15,39 @@ export default class RecursiveParser {
     "-",
     "$",
     "^",
-  ];
-
-  private specialChar = new Map<string, Array<any>>([
-    [
-      "d",
-      [
-        "[",
-        { token: "SYMBOL", value: "0" },
-        "-",
-        { token: "SYMBOL", value: "9" },
-        "]",
-      ],
-    ],
-    [
-      "w",
-      [
-        "[",
-        { token: "SYMBOL", value: "a" },
-        "-",
-        { token: "SYMBOL", value: "z" },
-        { token: "SYMBOL", value: "A" },
-        "-",
-        { token: "SYMBOL", value: "Z" },
-        { token: "SYMBOL", value: "0" },
-        "-",
-        { token: "SYMBOL", value: "9" },
-        { token: "SYMBOL", value: "_" },
-        "]",
-      ],
-    ],
-    ["s", [{ token: "SYMBOL", value: " " }]],
-    ["S", [{ token: "EXCEPTION", value: " " }]], // Implement this
   ]);
+
+  private getSpecialPattern(symbol: string, negated: boolean) {
+    switch (symbol) {
+      case "d":
+        return [
+          { token: "SYMBOL", value: "0", negated },
+          "-",
+          { token: "SYMBOL", value: "9" },
+        ];
+      case "w":
+        return [
+          { token: "SYMBOL", value: "a", negated },
+          "-",
+          { token: "SYMBOL", value: "z" },
+          { token: "SYMBOL", value: "A", negated },
+          "-",
+          { token: "SYMBOL", value: "Z" },
+          { token: "SYMBOL", value: "0", negated },
+          "-",
+          { token: "SYMBOL", value: "9" },
+          { token: "SYMBOL", value: "_", negated },
+        ];
+      case "s":
+        return [
+          { token: "SYMBOL", value: " ", negated },
+          { token: "SYMBOL", value: "\n", negated },
+          { token: "SYMBOL", value: "\t", negated },
+        ];
+    }
+  }
+
+  private specialChar = new Set<string>(["d", "D", "w", "W", "s", "S"]);
 
   constructor() {
     this.pointer = 0;
@@ -57,7 +57,6 @@ export default class RecursiveParser {
   parse(str: string) {
     this.pointer = 0;
     this.input = this.tokenize(str);
-    //console.log(this.input);
     return this.Expression();
   }
 
@@ -65,11 +64,19 @@ export default class RecursiveParser {
     return typeof token === "string" ? token : token.token;
   }
 
-  lookahead(): string {
-    return this.getTokenType(this.input[this.pointer]!);
+  lookahead(withValue: true): {
+    token: string;
+    value: string;
+    negated: boolean;
+  };
+  lookahead(withValue?: false): string;
+  lookahead(withValue: boolean = false) {
+    return withValue
+      ? this.input[this.pointer]!
+      : this.getTokenType(this.input[this.pointer]!);
   }
 
-  consume(expect: string) {
+  consume(expect: string): string {
     if (this.input.length <= this.pointer)
       throw Error("Can't consume end of string");
 
@@ -83,83 +90,91 @@ export default class RecursiveParser {
     return typeof curr === "string" ? curr : curr.value;
   }
 
-  Expression() {
-    let node: any = this.Term();
+  Expression(): NFA {
+    let left: NFA = this.Term();
 
+    const elements: Array<NFA> = [];
     while (this.lookahead() === "|") {
       this.consume("|");
-      const right = this.Term();
-      node = NFA.union(node, right);
+      const right: NFA = this.Term();
+      elements.push(right);
     }
-
-    return node;
+    if (elements.length > 0) left = NFA.union(left, ...elements);
+    return left;
   }
 
-  Term() {
-    let node: any = this.Factor();
+  Term(): NFA {
+    let left: NFA = this.Factor();
 
     while (
-      (this.lookahead() != "$" && this.lookahead() === "SYMBOL") ||
+      (this.lookahead() != "EOS" && this.lookahead() === "SYMBOL") ||
       this.lookahead() === "DIGIT" ||
       this.lookahead() === "(" ||
       this.lookahead() === "["
     ) {
-      const right = this.Factor();
-      node = NFA.concat(node, right);
+      const right: NFA = this.Factor();
+      left = NFA.concat(left, right);
     }
-    return node;
+    return left;
   }
 
-  Factor() {
-    let node: any = this.Base();
-    const lookahead = this.lookahead();
-    if (lookahead === "$") return node;
+  Factor(): NFA {
+    let node: NFA = this.Base();
+    const lookahead: string = this.lookahead();
+    if (lookahead === "EOS") return node;
 
     if (lookahead === "*") {
       this.consume("*");
-      node = NFA.rep(node);
+      return NFA.rep(node);
     }
 
     if (lookahead === "+") {
       this.consume("+");
-      node = NFA.concat(node, NFA.rep(node));
+      return NFA.concat(node, NFA.rep(node));
     }
 
     if (lookahead === "?") {
       this.consume("?");
-      node = NFA.union(node, NFA.epsilon());
+      return NFA.union(node, NFA.epsilon());
     }
+
     return node;
   }
 
   CharacterClass() {
     const elements: NFA[] = [];
+    const exeptions: NFA[] = [];
 
-    while (this.lookahead() === "SYMBOL") {
+    while (this.lookahead() === "SYMBOL" || this.lookahead() === "^") {
       const item = this.ClassItem();
-      if (item instanceof Array) {
-        elements.push(...item);
-      } else {
-        elements.push(item);
-      }
+
+      if (item.negated) exeptions.push(...item.list);
+      else elements.push(...item.list);
     }
 
-    if (elements.length === 0)
+    if (elements.length === 0 && exeptions.length === 0)
       throw Error("Invallid token after '[' : " + this.lookahead());
 
-    return NFA.union(...elements);
+    const union = elements.length > 0 ? NFA.union(...elements) : NFA.union();
+    return exeptions.length > 0 ? union.except(...exeptions).end() : union;
   }
 
   ClassItem() {
-    const left = this.Literal();
+    if (this.lookahead() === "^") {
+      this.consume("^");
+      return { negated: true, list: [this.Literal()] };
+    }
+
+    const curr = this.lookahead(true);
+    const left: NFA = this.Literal();
 
     if (this.lookahead() === "-") {
       this.consume("-");
-      const right = this.Literal();
-      return this.getRange(left, right);
+      const right: NFA = this.Literal();
+      return { negated: curr.negated, list: this.getRange(left, right) };
     }
 
-    return left;
+    return { negated: curr.negated, list: [left] };
   }
 
   Base() {
@@ -184,17 +199,17 @@ export default class RecursiveParser {
   }
 
   Literal() {
-    const symbol = this.lookahead();
-    if (symbol === "SYMBOL") {
-      return NFA.char(this.consume(symbol));
+    const item = this.lookahead(true);
+    if (this.getTokenType(item) === "SYMBOL") {
+      return NFA.char(this.consume("SYMBOL"));
     }
 
-    throw Error("' " + symbol + "' " + "is not a Literal.");
+    throw Error("' " + this.getTokenType(item) + "' " + "is not a Literal.");
   }
 
   getRange(leftLiteral: NFA, rightLiteral: NFA) {
-    const left: string | undefined = leftLiteral.in.keys()[0];
-    const right: string | undefined = rightLiteral.in.keys()[0];
+    let left: string = leftLiteral.in.keys()[0]!;
+    let right: string = rightLiteral.in.keys()[0]!;
 
     if (!left || !right) throw Error("Unexpected error!");
 
@@ -203,18 +218,11 @@ export default class RecursiveParser {
       (left >= "A" && right <= "Z") ||
       (left >= "0" && right <= "9")
     ) {
-      const spawn = () => {
-        const list = [];
-        for (
-          let i: number = left.charCodeAt(0);
-          i <= right.charCodeAt(0);
-          i++
-        ) {
-          list.push(NFA.char(String.fromCharCode(i)));
-        }
-        return list;
-      };
-      return spawn();
+      const list = [];
+      for (let i: number = left.charCodeAt(0); i <= right.charCodeAt(0); i++) {
+        list.push(NFA.char(String.fromCharCode(i)));
+      }
+      return list;
     }
 
     throw Error(
@@ -227,19 +235,26 @@ export default class RecursiveParser {
 
   tokenize(str: string) {
     let input: Array<any> = [];
+    let insideCharClass: boolean = false;
 
     for (let i = 0; i < str.length; i++) {
       const c: string = str[i]!;
-      if (this.reservedChar.includes(c)) input.push(c);
+      if (c === "[") insideCharClass = true;
+      else if (c === "]") insideCharClass = false;
+
+      if (this.reservedChar.has(c)) input.push(c);
       else if (c === "\\") {
         i++;
         if (i === str.length) throw Error("Symbol '\\' alone is not accepted.");
-        if (this.reservedChar.includes(str[i]!)) {
+        if (this.reservedChar.has(str[i]!)) {
           input.push({ token: "SYMBOL", value: str[i] });
         } else if (this.specialChar.has(str[i]!)) {
-          this.specialChar.get(str[i]!)?.forEach((t: any) => {
-            input.push(t);
-          });
+          const negated = str[i] === "S" || str[i] === "D" || str[i] === "W";
+          let pattern = this.getSpecialPattern(str[i]!.toLowerCase(), negated)!;
+          if (!insideCharClass) {
+            pattern = ["[", ...pattern, "]"];
+          }
+          pattern.forEach((t: any) => input.push(t));
         } else {
           throw Error("Symbol \\'" + str[i] + "' is not defined.");
         }

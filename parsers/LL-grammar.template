@@ -1,0 +1,85 @@
+%lex
+%%
+[a-zA-Z]   return 'ALPHA';
+[0-9]      return 'DIGIT';
+"|"        return '|';
+"*"        return '*';
+"("        return '(';
+")"        return ')';
+"["        return '[';
+"]"        return ']';
+"-"        return '-';
+/lex
+
+
+%left '|'
+%left CONCAT
+%left '*'
+%left '['
+%left '('
+%left ALPHA DIGIT
+
+%%
+
+
+Expression
+	: Term ExpressionPrime
+	;
+
+ExpressionPrime
+	: /* empty */
+	| '|' Term ExpressionPrime
+	;
+
+Term
+	: Factor TermPrime
+	;
+
+
+TermPrime
+	: /* empty */
+	| Factor TermPrime
+	;
+
+Factor	
+	: Base FactorPrime
+	;
+
+FactorPrime	
+	: /* empty */
+	| '*' 
+	| '+' 
+	| '?' 
+	; -- currently no symbols stack (a***)
+
+
+CharacterClass
+	: ClassItem CharacterClassTail
+	;
+
+CharacterClassTail
+	: ClassItem CharacterClassTail
+	| /* empty */
+	;
+
+ClassItem
+	: Literal ClassItemTail
+	;
+
+ClassItemTail
+	: '-' Literal
+    : '^' Literal
+	| /* empty */
+	;
+
+Base 
+	:  Literal
+	| '(' Expression ')'
+	| '[' CharacterClass ']'
+	;
+
+Literal	
+	: ALPHA
+	| DIGIT
+	;
+	
