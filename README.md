@@ -12,8 +12,8 @@ A TypeScript implementation of a regex engine using Non-deterministic Finite Aut
   - Plus: `a+`
   - Optional: `a?`
   - Grouping: `(ab)*`
-  - Character classes: `[abc]`, `[a-z]`, `[A-Z]`, `[0-9]`
-  - Sugar Syntax: `\w`, `\d`, `\s`
+  - Character classes: `[abc]`, `[a-z]`, `[A-Z]`, `[0-9]`, `[^a]`
+  - Sugar Syntax: `\w`, `\d`, `\s`, `\W`, `\D`, `\S`
 
 ## Installation
 
@@ -36,10 +36,11 @@ npm start
 ```
 
 Example:
+
 ```
 Enter regex pattern (or 'exit' to quit): a*b+
 
-Test: aaabbb - Valid 
+Test: aaabbb - Valid
 
 Test: bbb - Valid
 
@@ -47,8 +48,6 @@ Test: aaa - Invalid
 ```
 
 ### Build
-
-
 
 ## Project Structure
 
@@ -58,7 +57,7 @@ Test: aaa - Invalid
 │   ├── NFA.ts          # NFA construction and operations
 │   └── State.ts        # State machine implementation
 ├── parsers/
-│   ├── recursive.template       # notes about regex to abstract syntax tree 
+│   ├── recursive.template       # notes about regex to abstract syntax tree
 │   └── RecursiveParser.ts  # Recursive descent regex parser
 ├── __tests__/
 │   ├── parser.test.jsx     # Parser tests
@@ -81,6 +80,6 @@ npm test
 1. **Parsing**: The recursive descent parser tokenizes and parses regex patterns into an NFA using semantic actions.
 2. **Matching**: Input strings are tested against the NFA by traversing states and following epsilon transitions
 
-
 ## Author
+
 MammarDr

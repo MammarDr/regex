@@ -89,7 +89,8 @@ async function main() {
   console.log("  • Plus: a+");
   console.log("  • Optional: a?");
   console.log("  • Grouping: (ab)*");
-  console.log("  • Character class: [a-zA-Z0-9], \\w, \\d, \\s");
+  console.log("  • Character class: [a-zA-Z0-9], [^a]");
+  console.log("  • Sugar syntax: \\w, \\d, \\s");
 
   await promptForRegex();
 }

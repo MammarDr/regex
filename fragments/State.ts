@@ -1,15 +1,21 @@
+import { Union } from "./NFA";
+
 export default class State {
   private transitionsMap: Map<string, Array<State>>;
   private isFinal: boolean;
+  public isNegation: boolean;
   constructor({
     transitionsMap,
     isFinal = false,
+    isNegation = false,
   }: {
     transitionsMap?: Map<string, Array<State>>;
     isFinal?: boolean;
+    isNegation?: boolean;
   } = {}) {
     this.transitionsMap = transitionsMap || new Map();
     this.isFinal = isFinal;
+    this.isNegation = isNegation;
   }
 
   public getMap(): Map<string, Array<State>> {
@@ -38,8 +44,8 @@ export default class State {
     return this.isFinal;
   }
 
-  public acceptingState(flag: boolean): boolean {
-    return (this.isFinal = flag);
+  public acceptingState(flag: boolean) {
+    this.isFinal = flag;
   }
 
   public test(input: string) {
@@ -53,23 +59,42 @@ export default class State {
       });
     };
 
+    const epsilonStates: Set<State> = new Set();
+
     while (stack.length > 0) {
       const { state, index: currIndex } = stack!.pop()!;
+
+      // if (epsilonStates.has(state)) {
+      //   epsilonStates.clear();
+      //   continue;
+      // }
 
       if (input.length === currIndex) {
         if (state.isAcceptingState()) return true;
         if (state.hasTransition("ϵ")) {
           addToStack("ϵ", currIndex, state);
+          epsilonStates.add(state);
         }
         continue;
       }
       const symbol = input[currIndex]!;
 
-      if (!state.hasTransition(symbol) && !state.hasTransition("ϵ")) {
+      if (state.isNegation) {
+        const transitions = state.getMap();
+        if (transitions.size === 0 || transitions.has(symbol)) continue;
+
+        if (transitions.has("ϵ")) epsilonStates.add(state);
+        const key = transitions.keys().next().value;
+        addToStack(key!, currIndex + 1, state);
+
         continue;
       }
-      addToStack(symbol, currIndex + 1, state);
-      addToStack("ϵ", currIndex, state);
+
+      if (state.hasTransition(symbol)) addToStack(symbol, currIndex + 1, state);
+      if (state.hasTransition("ϵ")) {
+        addToStack("ϵ", currIndex, state);
+        epsilonStates.add(state);
+      }
     }
 
     return false;
